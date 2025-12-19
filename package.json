@@ -1,0 +1,14 @@
+{
+  "name": "supermmfaucet",
+  "version": "1.0.0",
+  "description": "Faucet real con seguridad básica",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.18.2",
+    "node-fetch": "^2.7.0"
+  }
+}
