@@ -5,7 +5,7 @@ const path = require("path");
 const fetch = (...args) => import("node-fetch").then(({default: fetch}) => fetch(...args));
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 /* ===== CONFIG ===== */
 const REWARD_5MIN = 0.00001;
@@ -14,8 +14,8 @@ const REWARD_DAILY = 0.0001;
 const COOLDOWN_5MIN = 5 * 60 * 1000;
 const COOLDOWN_DAILY = 24 * 60 * 60 * 1000;
 
-const FAUCETPAY_API = "bc6b2291feb99d430e8f84d00f48de44930ddefaa13c4b92ab73696850286fe8";
-const COIN = "BTC"; // cambia si usas otra moneda
+/* 🔐 TU SECRET KEY DE hCAPTCHA */
+const HCAPTCHA_SECRET = "ES_1866de7b7e854715801be748fb9010e2";
 
 /* ===== MIDDLEWARE ===== */
 app.use(express.json());
@@ -23,7 +23,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
   name: "faucet_session",
-  secret: "SUPER_FAUCET_SECRET",
+  secret: "SUPER_SECRET_KEY_123",
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: "lax" }
@@ -45,6 +45,22 @@ function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
+/* ===== CAPTCHA VERIFY ===== */
+async function verifyCaptcha(token, ip) {
+  const res = await fetch("https://hcaptcha.com/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      secret: HCAPTCHA_SECRET,
+      response: token,
+      remoteip: ip
+    })
+  });
+
+  const data = await res.json();
+  return data.success === true;
+}
+
 /* ===== ROOT ===== */
 app.get("/", (req, res) => {
   if (!req.session.email) {
@@ -56,7 +72,7 @@ app.get("/", (req, res) => {
 /* ===== LOGIN ===== */
 app.post("/login", (req, res) => {
   const { email } = req.body;
-  if (!email) return res.json({ success: false });
+  if (!email) return res.json({ success: false, error: "Email requerido" });
 
   req.session.email = email;
 
@@ -76,7 +92,6 @@ app.post("/login", (req, res) => {
 /* ===== LOGOUT ===== */
 app.get("/logout", (req, res) => {
   req.session.destroy(() => {
-    res.clearCookie("faucet_session");
     res.redirect("/");
   });
 });
@@ -97,8 +112,20 @@ app.get("/status", (req, res) => {
 });
 
 /* ===== CLAIM 5 MIN ===== */
-app.post("/claim/5min", (req, res) => {
-  if (!req.session.email) return res.json({ success: false });
+app.post("/claim/5min", async (req, res) => {
+  if (!req.session.email) {
+    return res.json({ success: false, error: "No autenticado" });
+  }
+
+  const { token } = req.body;
+  if (!token) {
+    return res.json({ success: false, error: "Captcha requerido" });
+  }
+
+  const captchaOK = await verifyCaptcha(token, req.ip);
+  if (!captchaOK) {
+    return res.json({ success: false, error: "Captcha inválido" });
+  }
 
   const data = loadData();
   const user = data.users[req.session.email];
@@ -112,70 +139,41 @@ app.post("/claim/5min", (req, res) => {
   user.last5 = now;
   saveData(data);
 
-  res.json({ success: true });
+  res.json({ success: true, balance: user.balance });
 });
 
 /* ===== CLAIM DAILY ===== */
-app.post("/claim/daily", (req, res) => {
-  if (!req.session.email) return res.json({ success: false });
+app.post("/claim/daily", async (req, res) => {
+  if (!req.session.email) {
+    return res.json({ success: false, error: "No autenticado" });
+  }
+
+  const { token } = req.body;
+  if (!token) {
+    return res.json({ success: false, error: "Captcha requerido" });
+  }
+
+  const captchaOK = await verifyCaptcha(token, req.ip);
+  if (!captchaOK) {
+    return res.json({ success: false, error: "Captcha inválido" });
+  }
 
   const data = loadData();
   const user = data.users[req.session.email];
   const now = Date.now();
 
   if (now - user.lastDaily < COOLDOWN_DAILY) {
-    return res.json({ success: false, error: "Ya reclamado hoy" });
+    return res.json({ success: false, error: "Reclamo diario ya usado" });
   }
 
   user.balance += REWARD_DAILY;
   user.lastDaily = now;
   saveData(data);
 
-  res.json({ success: true });
-});
-
-/* ===== WITHDRAW FAUCETPAY ===== */
-app.post("/withdraw", async (req, res) => {
-  if (!req.session.email) return res.json({ success: false });
-
-  const { address } = req.body;
-  if (!address) return res.json({ success: false, error: "Wallet requerida" });
-
-  const data = loadData();
-  const user = data.users[req.session.email];
-
-  if (user.balance <= 0) {
-    return res.json({ success: false, error: "Balance insuficiente" });
-  }
-
-  try {
-    const response = await fetch("https://faucetpay.io/api/v1/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: FAUCETPAY_API,
-        to: address,
-        amount: user.balance,
-        currency: COIN
-      })
-    });
-
-    const result = await response.json();
-
-    if (result.status !== 200) {
-      return res.json({ success: false, error: "Error FaucetPay" });
-    }
-
-    user.balance = 0;
-    saveData(data);
-
-    res.json({ success: true });
-  } catch (err) {
-    res.json({ success: false, error: "Servidor FaucetPay" });
-  }
+  res.json({ success: true, balance: user.balance });
 });
 
 /* ===== START ===== */
 app.listen(PORT, () => {
-  console.log("✅ Faucet activo");
+  console.log(`✅ Faucet activo en http://localhost:${PORT}`);
 });
