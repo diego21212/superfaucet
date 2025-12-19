@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Super Faucet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://hcaptcha.com/1/api.js" async defer></script>
+</head>
+
+<body class="bg-gray-900 text-white min-h-screen">
+
+<!-- BOTÓN HAMBURGUESA -->
+<button onclick="toggleMenu()"
+  class="fixed top-4 left-4 z-[9999] text-3xl bg-gray-800 p-2 rounded">
+  ☰
+</button>
+
+<!-- MENÚ -->
+<div id="menu"
+  class="fixed top-0 left-0 h-full w-64 bg-gray-800 p-6 transform -translate-x-full transition-transform z-[9998]">
+
+  <h2 class="text-xl font-bold mb-6">📋 Menú</h2>
+
+  <button onclick="showSection('five')"
+    class="block w-full text-left py-2 hover:text-blue-400">
+    ⏱ Reclamo 5 minutos
+  </button>
+
+  <button onclick="showSection('daily')"
+    class="block w-full text-left py-2 hover:text-green-400">
+    📅 Reclamo diario
+  </button>
+
+  <button onclick="logout()"
+    class="block w-full text-left py-2 text-red-400 hover:text-red-600">
+    🚪 Cerrar sesión
+  </button>
+</div>
+
+<!-- CONTENIDO -->
+<div class="flex items-center justify-center min-h-screen">
+<div class="bg-gray-800 w-full max-w-md rounded-xl p-6 shadow-xl">
+
+  <h1 class="text-3xl font-bold text-center mb-4">💧 Super Faucet</h1>
+
+  <!-- BALANCE -->
+  <div class="bg-gray-900 rounded-lg p-4 text-center mb-4">
+    <p class="text-gray-400 text-sm">Balance acumulado</p>
+    <h2 id="balance" class="text-2xl font-bold text-green-400">0.000000</h2>
+  </div>
+
+  <!-- ===== RECLAMO 5 MIN ===== -->
+  <div id="fiveSection">
+
+    <p class="text-center mb-1">Próximo reclamo en</p>
+    <h2 id="timer5" class="text-center text-2xl font-bold mb-2">Cargando...</h2>
+
+    <div class="w-full bg-gray-700 rounded-full h-3 mb-4">
+      <div id="bar5" class="bg-blue-500 h-3 w-full"></div>
+    </div>
+
+    <div class="flex justify-center mb-4">
+      <div class="h-captcha" data-sitekey="5a4cc018-e726-4d66-af14-86f4158ed4aa"></div>
+    </div>
+
+    <button id="claim5"
+      onclick="claim5()"
+      class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded font-bold">
+      Reclamar 5 minutos
+    </button>
+  </div>
+
+  <!-- ===== RECLAMO DIARIO ===== -->
+  <div id="dailySection" class="hidden">
+
+    <p class="text-center mb-1">Reclamo diario en</p>
+    <h2 id="timerDaily" class="text-center text-2xl font-bold mb-2">Cargando...</h2>
+
+    <button id="claimDaily"
+      onclick="claimDaily()"
+      class="w-full bg-green-600 hover:bg-green-700 py-3 rounded font-bold">
+      Reclamar diario
+    </button>
+  </div>
+
+  <p id="msg" class="text-center mt-4 text-sm text-gray-300"></p>
+
+</div>
+</div>
+
+<script>
+let interval5 = null;
+let intervalDaily = null;
+const FIVE = 300;
+const DAILY = 86400;
+
+function toggleMenu() {
+  document.getElementById("menu").classList.toggle("-translate-x-full");
+}
+
+function showSection(type) {
+  document.getElementById("fiveSection").classList.add("hidden");
+  document.getElementById("dailySection").classList.add("hidden");
+  document.getElementById(type + "Section").classList.remove("hidden");
+  toggleMenu();
+}
+
+function format(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+async function loadStatus() {
+  const res = await fetch("/status");
+  const d = await res.json();
+
+  if (!d.logged) {
+    location.href = "/";
+    return;
+  }
+
+  document.getElementById("balance").innerText = d.balance.toFixed(6);
+
+  startTimer5(d.last5);
+  startTimerDaily(d.lastDaily);
+}
+
+function startTimer5(last) {
+  clearInterval(interval5);
+  let left = Math.floor((last + FIVE * 1000 - Date.now()) / 1000);
+  if (left < 0) left = 0;
+
+  interval5 = setInterval(() => {
+    document.getElementById("timer5").innerText = left > 0 ? format(left) : "0:00";
+    document.getElementById("bar5").style.width = (left / FIVE * 100) + "%";
+    document.getElementById("claim5").disabled = left > 0;
+    left--;
+  }, 1000);
+}
+
+function startTimerDaily(last) {
+  clearInterval(intervalDaily);
+  let left = Math.floor((last + DAILY * 1000 - Date.now()) / 1000);
+  if (left < 0) left = 0;
+
+  intervalDaily = setInterval(() => {
+    document.getElementById("timerDaily").innerText = left > 0 ? format(left) : "0:00";
+    document.getElementById("claimDaily").disabled = left > 0;
+    left--;
+  }, 1000);
+}
+
+async function claim5() {
+  const token = document.querySelector('[name="h-captcha-response"]')?.value;
+  if (!token) {
+    msg.innerText = "Completa el captcha";
+    return;
+  }
+
+  msg.innerText = "Procesando...";
+
+  const res = await fetch("/claim/5min", { method: "POST" });
+  const d = await res.json();
+
+  if (!d.success) {
+    msg.innerText = d.error;
+    return;
+  }
+
+  msg.innerText = "✅ Reclamo exitoso";
+  hcaptcha.reset();
+  loadStatus();
+}
+
+async function claimDaily() {
+  msg.innerText = "Procesando...";
+
+  const res = await fetch("/claim/daily", { method: "POST" });
+  const d = await res.json();
+
+  if (!d.success) {
+    msg.innerText = d.error;
+    return;
+  }
+
+  msg.innerText = "✅ Reclamo diario exitoso";
+  loadStatus();
+}
+
+async function logout() {
+  await fetch("/logout", { method: "POST", credentials: "same-origin" });
+  window.location.replace("/");
+}
+
+loadStatus();
+</script>
+
+</body>
+</html>
