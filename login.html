@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Login Faucet</title>
+<style>
+body { 
+  text-align: center; 
+  font-family: Arial; 
+  margin-top: 60px; 
+}
+input, button { 
+  padding: 10px; 
+  margin: 5px; 
+}
+</style>
+</head>
+<body>
+
+<h2>🔐 Entrar al Faucet</h2>
+
+<input type="email" id="email" placeholder="Tu Gmail" required>
+<br>
+<button onclick="login()">Entrar</button>
+
+<p id="msg" style="color:red;"></p>
+
+<script>
+async function login() {
+  const email = document.getElementById("email").value.trim();
+  const msg = document.getElementById("msg");
+
+  msg.textContent = "";
+
+  if (!email) {
+    msg.textContent = "Escribe tu email";
+    return;
+  }
+
+  try {
+    const res = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      // 👉 AQUÍ ESTÁ LA CLAVE
+      window.location.href = "/faucet.html";
+    } else {
+      msg.textContent = data.message || "Error al iniciar sesión";
+    }
+
+  } catch (err) {
+    msg.textContent = "No se pudo conectar al servidor";
+  }
+}
+</script>
+
+</body>
+</html>
