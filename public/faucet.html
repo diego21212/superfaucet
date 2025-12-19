@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Super Faucet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://hcaptcha.com/1/api.js" async defer></script>
+</head>
+
+<body class="bg-gray-900 text-white min-h-screen">
+
+<button onclick="toggleMenu()" class="fixed top-4 left-4 z-50 text-3xl bg-gray-800 p-2 rounded">☰</button>
+
+<div id="menu" class="fixed top-0 left-0 h-full w-64 bg-gray-800 p-6 transform -translate-x-full transition z-40">
+  <h2 class="text-xl font-bold mb-6">📋 Menú</h2>
+  <button onclick="show('five')" class="block w-full text-left py-2">⏱ 5 minutos</button>
+  <button onclick="show('daily')" class="block w-full text-left py-2">📅 Diario</button>
+  <button onclick="show('withdraw')" class="block w-full text-left py-2">💸 Retirar</button>
+  <button onclick="location.href='/logout'" class="block w-full text-left py-2 text-red-400">🚪 Cerrar sesión</button>
+</div>
+
+<div class="flex justify-center items-center min-h-screen">
+<div class="bg-gray-800 w-full max-w-md p-6 rounded-xl">
+
+<h1 class="text-3xl font-bold text-center mb-4">💧 Super Faucet</h1>
+
+<div class="bg-gray-900 p-4 rounded mb-4 text-center">
+<p class="text-sm text-gray-400">Balance</p>
+<h2 id="balance" class="text-2xl text-green-400">0.000000</h2>
+</div>
+
+<div id="five">
+<button onclick="claim5()" class="w-full bg-blue-600 py-3 rounded mb-2">Reclamar 5 min</button>
+</div>
+
+<div id="daily" class="hidden">
+<button onclick="claimDaily()" class="w-full bg-green-600 py-3 rounded mb-2">Reclamar diario</button>
+</div>
+
+<div id="withdraw" class="hidden">
+<input id="wallet" placeholder="Wallet FaucetPay" class="w-full p-2 mb-2 text-black rounded">
+<button onclick="withdraw()" class="w-full bg-yellow-500 py-3 rounded">Retirar</button>
+</div>
+
+<div class="flex justify-center my-4">
+<div class="h-captcha" data-sitekey="5a4cc018-e726-4d66-af14-86f4158ed4aa"></div>
+</div>
+
+<p id="msg" class="text-center text-sm"></p>
+
+</div>
+</div>
+
+<script>
+function toggleMenu(){menu.classList.toggle("-translate-x-full")}
+function show(id){
+["five","daily","withdraw"].forEach(x=>document.getElementById(x).classList.add("hidden"));
+document.getElementById(id).classList.remove("hidden");
+toggleMenu();
+}
+
+async function load(){
+const r=await fetch("/status");const d=await r.json();
+if(!d.logged)location.href="/";
+balance.innerText=d.balance.toFixed(6);
+}
+load();
+
+async function claim5(){
+msg.innerText="Procesando...";
+const r=await fetch("/claim/5min",{method:"POST"});
+const d=await r.json();
+msg.innerText=d.success?"✅ Reclamo exitoso":d.error;
+load();
+}
+
+async function claimDaily(){
+msg.innerText="Procesando...";
+const r=await fetch("/claim/daily",{method:"POST"});
+const d=await r.json();
+msg.innerText=d.success?"✅ Reclamo exitoso":d.error;
+load();
+}
+
+async function withdraw(){
+msg.innerText="Procesando...";
+const r=await fetch("/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:wallet.value})});
+const d=await r.json();
+msg.innerText=d.success?"💸 Retiro enviado":"❌ "+d.error;
+load();
+}
+</script>
+
+</body>
+</html>
